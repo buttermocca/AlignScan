@@ -697,11 +697,15 @@ class MainWindow(QMainWindow):
             return
         try:
             confidence = self.ai_confidence_slider.value() / 100.0
+            # Remove the previous AI proposal set before appending a fresh run.
+            # Keep the independent classical/manual regions intact.
+            self.regions = [region for region in self.regions
+                            if not region.label.startswith("AI ")]
             boxes = self.ai_detector.detect(self.image, confidence=confidence)
             for corners in boxes:
                 if not any(np.mean(np.linalg.norm(region.corners - corners, axis=1)) < 35
                            for region in self.regions):
-                    self.regions.append(DocumentRegion(corners, "AI 사각 박스"))
+                    self.regions.append(DocumentRegion(corners, "AI 문서 후보"))
             if self.regions:
                 self.selected = min(max(self.selected, 0), len(self.regions) - 1)
             else:
@@ -713,21 +717,24 @@ class MainWindow(QMainWindow):
             max_conf = diag.get("max_confidence", 0.0)
             input_size = diag.get("input_size", (0, 0))
             output_shape = diag.get("output_shape")
+            tile_count = diag.get("tile_count", 0)
+            rejected = diag.get("full_frame_rejected", 0) + diag.get("tile_rejected", 0)
             if boxes:
                 self.ai_status.setText(
-                    f"AI 검출 {len(boxes)}개 · 최고 신뢰도 {max_conf:.1%} · "
+                    f"AI 문서 후보 {len(boxes)}개 · 최고 점수 {max_conf:.1%} · "
                     f"기준 {confidence:.0%} · 입력 {input_size[0]}×{input_size[1]} · "
-                    f"출력 {output_shape}")
+                    f"분할 검사 {tile_count}회 · 전체면 오검출 제외 {rejected}개")
                 self.status.setText(
-                    f"AI 사각 박스 {len(boxes)}개를 찾았습니다. 네 모서리 정밀 검출이 아니므로 경계를 확인하세요.")
+                    f"AI가 {len(boxes)}개 후보를 찾았습니다. 결과는 대략적인 사각 박스이므로 "
+                    "각 영수증의 네 모서리를 확인해 주세요.")
             else:
                 self.ai_status.setText(
-                    f"검출 결과 없음 · 최고 신뢰도 {max_conf:.1%} · 기준 {confidence:.0%} · "
-                    f"입력 {input_size[0]}×{input_size[1]} · 출력 {output_shape}. "
-                    "감도를 낮춰 다시 시도해보세요.")
+                    f"유효한 개별 문서 후보 없음 · 최고 점수 {max_conf:.1%} · "
+                    f"기준 {confidence:.0%} · 분할 검사 {tile_count}회 · "
+                    f"전체면 오검출 제외 {rejected}개 · 출력 {output_shape}")
                 self.status.setText(
-                    f"AI 검출 결과가 없습니다 (최고 신뢰도 {max_conf:.1%}, 기준 {confidence:.0%}). "
-                    "일반 자동 찾기를 함께 사용하세요.")
+                    "AI가 스캔 전체 영역을 문서로 착각했거나 개별 영수증 후보를 찾지 못했습니다. "
+                    "기본 자동 찾기(윤곽선) 또는 직접 모서리 지정을 사용해 주세요.")
         except Exception as exc:
             QMessageBox.warning(self, "AI 검출 오류", str(exc))
 
