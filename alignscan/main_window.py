@@ -13,6 +13,8 @@ from .imaging import enhance_image
 from .canvas import ScanCanvas
 from .preview import ZoomPreview
 from .ai_detector import OnnxDocumentDetector
+from .transforms import (rotate_quarter, rotate_expand, flip_image,
+                         transform_points, ruler_correction_angle)
 
 
 def bgr_to_pixmap(image: np.ndarray) -> QPixmap:
@@ -36,6 +38,7 @@ class MainWindow(QMainWindow):
         self.image_path: str | None = None
         self.regions: list[DocumentRegion] = []
         self.selected = -1
+        self.ruler_line: tuple[np.ndarray, np.ndarray, str] | None = None
         self.ai_detector: OnnxDocumentDetector | None = None
         self.preview_timer = QTimer(self)
         self.preview_timer.setSingleShot(True)
@@ -117,7 +120,30 @@ class MainWindow(QMainWindow):
         view_head.addWidget(self.source_info)
         left_col.addLayout(view_head)
         self.canvas = ScanCanvas()
+        self.canvas.zoom_changed.connect(
+            lambda value: self.canvas_zoom_label.setText(f"작업 영역 {value}%")
+            if hasattr(self, "canvas_zoom_label") else None)
         left_col.addWidget(self.canvas, 1)
+
+        canvas_tools = QHBoxLayout()
+        self.btn_ruler_h = QPushButton("／ 수평 룰러")
+        self.btn_ruler_v = QPushButton("│ 수직 룰러")
+        self.btn_apply_ruler = QPushButton("룰러 기준 수평 보정")
+        self.btn_clear_ruler = QPushButton("기준선 지우기")
+        self.btn_fit_canvas = QPushButton("화면 맞춤")
+        self.btn_apply_ruler.setEnabled(False)
+        self.btn_clear_ruler.setEnabled(False)
+        self.canvas_zoom_label = QLabel("작업 영역 100%")
+        self.canvas_zoom_label.setStyleSheet("color:#7773df;font-weight:900")
+        canvas_tools.addWidget(self.btn_ruler_h)
+        canvas_tools.addWidget(self.btn_ruler_v)
+        canvas_tools.addWidget(self.btn_apply_ruler)
+        canvas_tools.addWidget(self.btn_clear_ruler)
+        canvas_tools.addWidget(self.btn_fit_canvas)
+        canvas_tools.addStretch()
+        canvas_tools.addWidget(self.canvas_zoom_label)
+        left_col.addLayout(canvas_tools)
+
         foot = QHBoxLayout()
         self.btn_delete = QPushButton("선택 영역 삭제")
         self.btn_redetect = QPushButton("다시 자동 찾기")
@@ -209,6 +235,66 @@ class MainWindow(QMainWindow):
         adjust_layout.addWidget(scroll)
         tabs.addTab(adjust_tab, "이미지 보정")
 
+        rotate_tab = QWidget()
+        rotate_col = QVBoxLayout(rotate_tab)
+        rotate_col.setContentsMargins(13, 13, 13, 13)
+
+        quick_rotate = QGroupBox("↻ 빠른 회전")
+        quick_row = QHBoxLayout(quick_rotate)
+        self.btn_rotate_90 = QPushButton("90° ↻")
+        self.btn_rotate_180 = QPushButton("180°")
+        self.btn_rotate_270 = QPushButton("270° ↻")
+        self.btn_rotate_ccw = QPushButton("90° ↺")
+        for button in (self.btn_rotate_90, self.btn_rotate_180,
+                       self.btn_rotate_270, self.btn_rotate_ccw):
+            quick_row.addWidget(button)
+        rotate_col.addWidget(quick_rotate)
+
+        flip_group = QGroupBox("↔ 이미지 뒤집기")
+        flip_row = QHBoxLayout(flip_group)
+        self.btn_flip_h = QPushButton("좌우 반전")
+        self.btn_flip_v = QPushButton("상하 반전")
+        flip_row.addWidget(self.btn_flip_h)
+        flip_row.addWidget(self.btn_flip_v)
+        rotate_col.addWidget(flip_group)
+
+        angle_group = QGroupBox("🎚 수동 각도 조절")
+        angle_col = QVBoxLayout(angle_group)
+        angle_row = QHBoxLayout()
+        angle_row.addWidget(QLabel("각도"))
+        self.angle_slider = QSlider(Qt.Horizontal)
+        self.angle_slider.setRange(-180, 180)
+        self.angle_slider.setValue(0)
+        self.angle_spin = QDoubleSpinBox()
+        self.angle_spin.setRange(-180.0, 180.0)
+        self.angle_spin.setDecimals(1)
+        self.angle_spin.setSingleStep(0.5)
+        self.angle_spin.setSuffix("°")
+        self.angle_spin.setValue(0.0)
+        angle_row.addWidget(self.angle_slider, 1)
+        angle_row.addWidget(self.angle_spin)
+        angle_col.addLayout(angle_row)
+        angle_actions = QHBoxLayout()
+        self.btn_apply_angle = QPushButton("각도 적용")
+        self.btn_reset_angle = QPushButton("값 초기화")
+        angle_actions.addWidget(self.btn_apply_angle)
+        angle_actions.addWidget(self.btn_reset_angle)
+        angle_col.addLayout(angle_actions)
+        self.angle_slider.valueChanged.connect(self.angle_spin.setValue)
+        self.angle_spin.valueChanged.connect(lambda value: self.angle_slider.setValue(round(value)))
+        rotate_col.addWidget(angle_group)
+
+        ruler_help = QLabel(
+            "룰러 사용법: 수평 또는 수직 룰러를 선택한 뒤 작업 이미지 위에서 "
+            "기준으로 삼을 선을 마우스로 드래그하세요. 그 선이 수평/수직이 되도록 "
+            "이미지 전체를 회전합니다. 작업 캔버스에서는 휠로 확대·축소하고 "
+            "마우스 가운데 버튼 또는 오른쪽 버튼으로 화면을 이동할 수 있습니다.")
+        ruler_help.setWordWrap(True)
+        ruler_help.setStyleSheet("color:#777da8;padding:10px;background:#f6f3ff;border-radius:10px")
+        rotate_col.addWidget(ruler_help)
+        rotate_col.addStretch()
+        tabs.addTab(rotate_tab, "회전·룰러")
+
         output_tab = QWidget()
         out = QVBoxLayout(output_tab)
         out.setContentsMargins(13, 13, 13, 13)
@@ -271,6 +357,19 @@ class MainWindow(QMainWindow):
         self.doc_list.currentRowChanged.connect(self.select_region)
         self.btn_select_all.clicked.connect(self.select_all_regions)
         self.btn_ai.clicked.connect(self.load_ai_model)
+        self.btn_ruler_h.clicked.connect(lambda: self._start_ruler("horizontal"))
+        self.btn_ruler_v.clicked.connect(lambda: self._start_ruler("vertical"))
+        self.btn_apply_ruler.clicked.connect(self._apply_ruler)
+        self.btn_clear_ruler.clicked.connect(self._clear_ruler)
+        self.btn_fit_canvas.clicked.connect(self.canvas.fit_to_window)
+        self.btn_rotate_90.clicked.connect(lambda: self.rotate_by_quarter(90))
+        self.btn_rotate_180.clicked.connect(lambda: self.rotate_by_quarter(180))
+        self.btn_rotate_270.clicked.connect(lambda: self.rotate_by_quarter(270))
+        self.btn_rotate_ccw.clicked.connect(lambda: self.rotate_by_quarter(270))
+        self.btn_flip_h.clicked.connect(lambda: self.flip_current_image(True))
+        self.btn_flip_v.clicked.connect(lambda: self.flip_current_image(False))
+        self.btn_apply_angle.clicked.connect(self.apply_custom_rotation)
+        self.btn_reset_angle.clicked.connect(lambda: (self.angle_spin.setValue(0), self.angle_slider.setValue(0)))
         self.quality_slider.valueChanged.connect(self.quality_value.setValue)
         self.quality_value.valueChanged.connect(self.quality_slider.setValue)
         self.format_combo.currentIndexChanged.connect(self._format_changed)
@@ -308,11 +407,17 @@ class MainWindow(QMainWindow):
         self.canvas.polygon_created.connect(self.add_manual_region)
         self.canvas.polygon_changed.connect(self._canvas_region_changed)
         self.canvas.image_dropped.connect(self._load_image)
+        self.canvas.ruler_created.connect(self._on_ruler_created)
 
     def _set_controls_enabled(self, enabled: bool):
         for widget in (self.btn_detect, self.btn_add, self.btn_save_all, self.btn_save_all2,
                        self.btn_save_selected, self.btn_delete, self.btn_redetect,
-                       self.btn_select_all, self.btn_ai, self.sensitivity_slider):
+                       self.btn_select_all, self.btn_ai, self.sensitivity_slider,
+                       self.btn_ruler_h, self.btn_ruler_v, self.btn_apply_ruler,
+                       self.btn_clear_ruler, self.btn_rotate_90, self.btn_rotate_180,
+                       self.btn_rotate_270, self.btn_rotate_ccw, self.btn_flip_h,
+                       self.btn_flip_v, self.angle_slider, self.angle_spin,
+                       self.btn_apply_angle, self.btn_reset_angle):
             widget.setEnabled(enabled)
 
     def _format_changed(self):
@@ -355,6 +460,10 @@ class MainWindow(QMainWindow):
             return
         self.image = image
         self.image_path = path
+        self.ruler_line = None
+        self.canvas.clear_ruler_line()
+        self.btn_apply_ruler.setEnabled(False)
+        self.btn_clear_ruler.setEnabled(False)
         self._preview_region = -1
         self.regions = []
         self.selected = -1
@@ -559,6 +668,120 @@ class MainWindow(QMainWindow):
             self.status.setText(f"AI 검출 완료 · {len(boxes)}개 후보 · {self.ai_detector.provider}")
         except Exception as exc:
             QMessageBox.warning(self, "AI 검출 오류", str(exc))
+
+
+    def _start_ruler(self, orientation: str):
+        if self.image is None:
+            return
+        self.canvas.set_ruler_mode(orientation)
+        label = "수평" if orientation == "horizontal" else "수직"
+        self.status.setText(f"{label} 기준 룰러를 작업 이미지 위에서 마우스로 드래그해 그어주세요.")
+
+    def _on_ruler_created(self, start, end, orientation: str):
+        self.ruler_line = (
+            np.asarray(start, dtype=np.float32).copy(),
+            np.asarray(end, dtype=np.float32).copy(),
+            orientation,
+        )
+        self.canvas.set_ruler_line(*self.ruler_line)
+        self.btn_apply_ruler.setEnabled(True)
+        self.btn_clear_ruler.setEnabled(True)
+        self.status.setText("기준선이 만들어졌습니다. '룰러 기준 수평 보정'을 눌러 기울기를 바로잡으세요.")
+
+    def _clear_ruler(self):
+        self.ruler_line = None
+        self.canvas.clear_ruler_line()
+        self.btn_apply_ruler.setEnabled(False)
+        self.btn_clear_ruler.setEnabled(False)
+        self.status.setText("룰러 기준선을 지웠습니다.")
+
+    def _refresh_transformed_image(self, new_image: np.ndarray, matrix: np.ndarray,
+                                   description: str):
+        if self.image is None:
+            return
+        was_empty = not self.regions
+        transformed = []
+        for region in self.regions:
+            corners = transform_points(region.corners, matrix)
+            transformed.append(DocumentRegion(corners, region.label))
+        self.image = new_image
+        self.regions = transformed
+        self.ruler_line = None
+        self.canvas.clear_ruler_line()
+        self.btn_apply_ruler.setEnabled(False)
+        self.btn_clear_ruler.setEnabled(False)
+
+        height, width = new_image.shape[:2]
+        self.preview_scale = min(1.0, 1200.0 / max(height, width))
+        self.preview_image = (
+            cv2.resize(new_image, None, fx=self.preview_scale, fy=self.preview_scale,
+                       interpolation=cv2.INTER_AREA)
+            if self.preview_scale < 1.0 else new_image
+        )
+        self.canvas.set_image(bgr_to_pixmap(new_image))
+        self._preview_region = -1
+        self._refresh_regions()
+        self.source_info.setText(f"{Path(self.image_path).name if self.image_path else '이미지'} · {width} × {height} px")
+        self.canvas.fit_to_window()
+
+        if self.regions:
+            self.selected = min(max(self.selected, 0), len(self.regions) - 1)
+            self.select_region(self.selected)
+        elif was_empty:
+            self.selected = -1
+            self.auto_detect()
+        self.status.setText(f"{description} 적용 완료 · 모서리 위치도 함께 변환했습니다.")
+
+    def rotate_by_quarter(self, clockwise_degrees: int):
+        if self.image is None:
+            return
+        try:
+            new_image, matrix = rotate_quarter(self.image, clockwise_degrees)
+            self._refresh_transformed_image(new_image, matrix, f"{clockwise_degrees}도 회전")
+            self.angle_spin.setValue(0)
+            self.angle_slider.setValue(0)
+        except Exception as exc:
+            QMessageBox.warning(self, "회전 오류", str(exc))
+
+    def flip_current_image(self, horizontal: bool):
+        if self.image is None:
+            return
+        try:
+            new_image, matrix = flip_image(self.image, horizontal=horizontal)
+            description = "좌우 반전" if horizontal else "상하 반전"
+            self._refresh_transformed_image(new_image, matrix, description)
+        except Exception as exc:
+            QMessageBox.warning(self, "뒤집기 오류", str(exc))
+
+    def apply_custom_rotation(self):
+        if self.image is None:
+            return
+        angle = float(self.angle_spin.value())
+        if abs(angle) < 0.05:
+            return
+        try:
+            new_image, matrix = rotate_expand(self.image, angle)
+            self._refresh_transformed_image(new_image, matrix, f"수동 {angle:g}도 회전")
+            self.angle_spin.setValue(0)
+            self.angle_slider.setValue(0)
+        except Exception as exc:
+            QMessageBox.warning(self, "회전 오류", str(exc))
+
+    def _apply_ruler(self):
+        if self.image is None or self.ruler_line is None:
+            return
+        start, end, orientation = self.ruler_line
+        try:
+            angle = ruler_correction_angle(start, end, orientation)
+            if abs(angle) < 0.05:
+                self._clear_ruler()
+                self.status.setText("기준선이 이미 수평/수직에 가깝습니다.")
+                return
+            new_image, matrix = rotate_expand(self.image, angle)
+            label = "수평" if orientation == "horizontal" else "수직"
+            self._refresh_transformed_image(new_image, matrix, f"{label} 룰러 보정 ({angle:+.2f}도)")
+        except Exception as exc:
+            QMessageBox.warning(self, "룰러 보정 오류", str(exc))
 
     def closeEvent(self, event):
         event.accept()
