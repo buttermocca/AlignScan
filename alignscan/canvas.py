@@ -129,6 +129,13 @@ class ScanCanvas(QWidget):
         return np.array([(point.x() - self._offset.x()) / self._scale,
                          (point.y() - self._offset.y()) / self._scale], dtype=np.float32)
 
+    def _clamped_image_point(self, point: QPointF):
+        result = self.widget_to_image(point)
+        if not self.pixmap.isNull():
+            result[0] = np.clip(result[0], 0, self.pixmap.width() - 1)
+            result[1] = np.clip(result[1], 0, self.pixmap.height() - 1)
+        return result
+
     def _zoom_at(self, point: QPointF, delta: int):
         if self.pixmap.isNull() or not delta:
             return
@@ -288,13 +295,13 @@ class ScanCanvas(QWidget):
             return
 
         if self.ruler_mode:
-            self._ruler_start = self.widget_to_image(event.position())
+            self._ruler_start = self._clamped_image_point(event.position())
             self._ruler_current = self._ruler_start.copy()
             self.update()
             return
 
         if self.add_mode:
-            self.draft.append(self.widget_to_image(event.position()))
+            self.draft.append(self._clamped_image_point(event.position()))
             if len(self.draft) == 4:
                 points = np.array(self.draft, dtype=np.float32)
                 self.polygon_created.emit(points)
@@ -327,13 +334,13 @@ class ScanCanvas(QWidget):
             self.update()
             return
         if self.ruler_mode and self._ruler_start is not None:
-            self._ruler_current = self.widget_to_image(event.position())
+            self._ruler_current = self._clamped_image_point(event.position())
             self.update()
             return
         if self.drag_corner is not None:
             idx, corner = self.drag_corner
             points = self.regions[idx].copy()
-            points[corner] = self.widget_to_image(event.position())
+            points[corner] = self._clamped_image_point(event.position())
             self.regions[idx] = points
             self.polygon_changed.emit(idx, points)
             self.update()
@@ -347,7 +354,7 @@ class ScanCanvas(QWidget):
             self.setCursor(Qt.CrossCursor if (self.add_mode or self.ruler_mode) else Qt.ArrowCursor)
             return
         if event.button() == Qt.LeftButton and self.ruler_mode and self._ruler_start is not None:
-            end = self.widget_to_image(event.position())
+            end = self._clamped_image_point(event.position())
             start = self._ruler_start.copy()
             orientation = self.ruler_mode
             self._ruler_start = None
