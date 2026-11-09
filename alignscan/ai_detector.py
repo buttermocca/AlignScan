@@ -124,7 +124,9 @@ class OnnxDocumentDetector:
             boxes.append([x1, y1, box_w, box_h])
             kept_scores.append(float(score))
 
-        return boxes, kept_scores, tuple(raw.shape), float(np.max(scores)) if scores.size else 0.0, rejected_full
+        raw_max = float(np.max(scores)) if scores.size else 0.0
+        valid_max = max(kept_scores) if kept_scores else 0.0
+        return boxes, kept_scores, tuple(raw.shape), raw_max, rejected_full, valid_max
 
     @staticmethod
     def _overlapping_windows(width: int, height: int):
@@ -160,7 +162,7 @@ class OnnxDocumentDetector:
 
         confidence = float(np.clip(confidence, 0.01, 0.95))
         height, width = image.shape[:2]
-        full_boxes, full_scores, output_shape, max_conf, full_rejected = self._infer_window(
+        full_boxes, full_scores, output_shape, max_conf, full_rejected, valid_max = self._infer_window(
             image, confidence
         )
 
@@ -176,10 +178,11 @@ class OnnxDocumentDetector:
         windows = self._overlapping_windows(width, height) if len(full_boxes) < 2 else []
         for x, y, tile_w, tile_h, name in windows:
             tile = image[y:y + tile_h, x:x + tile_w]
-            boxes, scores, _, tile_max, rejected = self._infer_window(tile, confidence)
+            boxes, scores, _, tile_max, rejected, tile_valid_max = self._infer_window(tile, confidence)
             tile_count += 1
             tile_names.append(name)
             max_conf = max(max_conf, tile_max)
+            valid_max = max(valid_max, tile_valid_max)
             rejected_tile_boxes += rejected
             for box, score in zip(boxes, scores):
                 bx, by, bw, bh = box
@@ -205,6 +208,7 @@ class OnnxDocumentDetector:
             "input_size": (self.input_w, self.input_h),
             "output_shape": output_shape,
             "max_confidence": max_conf,
+            "max_valid_confidence": valid_max,
             "full_frame_candidates": len(full_boxes),
             "full_frame_rejected": full_rejected,
             "tile_count": tile_count,
