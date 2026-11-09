@@ -23,7 +23,9 @@ jobs:
           cache-dependency-path: requirements*.txt
       - name: Install dependencies
         run: python -m pip install --upgrade pip && pip install -r requirements-dev.txt pyinstaller
-      - name: Test document detection and image tuning
+      - name: Check Python syntax
+        run: python -m compileall -q app.py alignscan tests
+      - name: Test document detection, image tuning and orientation tools
         run: python -m pytest -q
       - name: Generate mascot and app icon
         run: python -c "from alignscan.asset_generator import ensure_assets; ensure_assets('assets')"
