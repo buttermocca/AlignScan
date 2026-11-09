@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QPixmap, QImage, QAction
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFileDialog, QMessageBox, QSplitter, QFrame, QListWidget, QListWidgetItem,
-    QSlider, QSpinBox, QComboBox, QGroupBox, QTabWidget, QScrollArea, QLineEdit)
+    QSlider, QSpinBox, QDoubleSpinBox, QComboBox, QGroupBox, QTabWidget, QScrollArea, QLineEdit)
 from .geometry import DocumentRegion, detect_document_regions, rectify_document
 from .imaging import enhance_image
 from .canvas import ScanCanvas
