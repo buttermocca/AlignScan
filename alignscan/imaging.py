@@ -4,15 +4,28 @@ import numpy as np
 
 
 def enhance_image(image: np.ndarray, brightness: int = 0, contrast: int = 100,
-                  saturation: int = 100, denoise: int = 0, dust: int = 0) -> np.ndarray:
-    """Apply adjustable photographic and cleanup controls to a BGR image."""
+                  saturation: int = 100, denoise: int = 0, dust: int = 0,
+                  sharpness: int = 0, fast: bool = False) -> np.ndarray:
+    """Apply brightness, contrast, saturation, cleanup and unsharp-mask sharpening."""
     if image is None or image.size == 0:
         return image
     out = image.copy()
-    if denoise > 0:
+    if denoise > 0 and fast:
+        # A blended 3x3 Gaussian is intentionally used for the live preview;
+        # the real export path below retains the stronger NLM filter.
+        blur = cv2.GaussianBlur(out, (3, 3), 0.65)
+        blend = min(0.72, denoise / 145.0)
+        out = cv2.addWeighted(out, 1.0 - blend, blur, blend, 0)
+    elif denoise > 0:
         strength = max(1, int(2 + denoise * 0.20))
         out = cv2.fastNlMeansDenoisingColored(out, None, strength, strength, 7, 21)
-    if dust > 0:
+    if dust > 0 and fast:
+        # Approximate isolated dust removal for a responsive preview. The
+        # saved image still uses the conservative spot mask + inpaint below.
+        median = cv2.medianBlur(out, 3)
+        blend = min(0.8, dust / 100.0)
+        out = cv2.addWeighted(out, 1.0 - blend, median, blend, 0)
+    elif dust > 0:
         gray = cv2.cvtColor(out, cv2.COLOR_BGR2GRAY)
         k = max(7, int(7 + dust * 0.10) | 1)
         background = cv2.morphologyEx(gray, cv2.MORPH_CLOSE,
@@ -36,4 +49,8 @@ def enhance_image(image: np.ndarray, brightness: int = 0, contrast: int = 100,
         hsv = cv2.cvtColor(out, cv2.COLOR_BGR2HSV).astype(np.float32)
         hsv[:, :, 1] = np.clip(hsv[:, :, 1] * (saturation / 100.0), 0, 255)
         out = cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
+    if sharpness > 0:
+        amount = min(1.35, float(sharpness) / 75.0)
+        blurred = cv2.GaussianBlur(out, (0, 0), 1.0 if fast else 1.25)
+        out = cv2.addWeighted(out, 1.0 + amount, blurred, -amount, 0)
     return out
