@@ -94,8 +94,8 @@ class MainWindow(QMainWindow):
         if banner.isNull():
             banner = QPixmap(str(asset_root / "mascot_banner.png"))
         if not banner.isNull():
-            mascot.setPixmap(banner.scaledToHeight(86, Qt.SmoothTransformation))
-            mascot.setMaximumWidth(270)
+            mascot.setPixmap(banner.scaledToHeight(100, Qt.SmoothTransformation))
+            mascot.setMaximumWidth(285)
             mascot.setMinimumWidth(175)
             top_row.addWidget(mascot)
         top_row.addStretch()
