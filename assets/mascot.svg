@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 220" role="img" aria-label="AlignScan smiling receipt mascot">
+  <rect width="220" height="220" rx="34" fill="#fffaf7"/>
+  <ellipse cx="110" cy="190" rx="57" ry="10" fill="#eadbd5"/>
+  <path d="M110 42V27" stroke="#5dad91" stroke-width="6" stroke-linecap="round"/><circle cx="110" cy="21" r="9" fill="#ffcf66" stroke="#e6a45f" stroke-width="2"/>
+  <rect x="55" y="43" width="110" height="145" rx="23" fill="#fffffa" stroke="#ff8c99" stroke-width="6"/>
+  <path d="M78 51Q110 25 142 51" fill="none" stroke="#ffc0c6" stroke-width="4"/>
+  <ellipse cx="85" cy="98" rx="5" ry="8" fill="#384b42"/><ellipse cx="135" cy="98" rx="5" ry="8" fill="#384b42"/>
+  <ellipse cx="76" cy="117" rx="10" ry="6" fill="#ffc0c6" opacity=".8"/><ellipse cx="144" cy="117" rx="10" ry="6" fill="#ffc0c6" opacity=".8"/>
+  <path d="M96 112Q110 130 124 112" fill="none" stroke="#eb7384" stroke-width="4" stroke-linecap="round"/>
+  <path d="M80 153h60M91 166h38" stroke="#cfe1d8" stroke-width="5" stroke-linecap="round"/>
+  <path d="M52 108q-19 9-19 25M168 108q19 9 19 25" fill="none" stroke="#ff8c99" stroke-width="6" stroke-linecap="round"/>
+  <path d="M25 58v18m-9-9h18M192 57v14m-7-7h14" stroke="#ffc259" stroke-width="4" stroke-linecap="round"/>
+</svg>
