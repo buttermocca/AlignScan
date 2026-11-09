@@ -33,7 +33,8 @@ def rotate_expand(image: np.ndarray, angle_degrees: float,
     matrix[0, 2] += new_w / 2.0 - center[0]
     matrix[1, 2] += new_h / 2.0 - center[1]
     rotated = cv2.warpAffine(image, matrix, (new_w, new_h),
-                             flags=interpolation, borderMode=cv2.BORDER_REPLICATE)
+                             flags=interpolation, borderMode=cv2.BORDER_CONSTANT,
+                             borderValue=(255, 255, 255))
     return rotated, matrix.astype(np.float32)
 
 
