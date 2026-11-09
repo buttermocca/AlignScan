@@ -199,6 +199,33 @@ class MainWindow(QMainWindow):
         self.ai_status.setWordWrap(True)
         self.ai_status.setStyleSheet("color:#8887ae;font-size:8.5pt")
         docs.addWidget(self.ai_status)
+        ai_conf_group = QGroupBox("AI 검출 신뢰도")
+        ai_conf_col = QVBoxLayout(ai_conf_group)
+        ai_conf_head = QHBoxLayout()
+        ai_conf_head.addWidget(QLabel("낮음 · 더 많이 검출"))
+        ai_conf_head.addStretch()
+        self.ai_confidence_value = QLabel("25%")
+        self.ai_confidence_value.setStyleSheet("color:#7773df;font-weight:900")
+        ai_conf_head.addWidget(self.ai_confidence_value)
+        ai_conf_head.addStretch()
+        ai_conf_head.addWidget(QLabel("높음 · 더 엄격하게"))
+        ai_conf_col.addLayout(ai_conf_head)
+        self.ai_confidence_slider = QSlider(Qt.Horizontal)
+        self.ai_confidence_slider.setRange(5, 80)
+        self.ai_confidence_slider.setValue(25)
+        self.ai_confidence_slider.valueChanged.connect(
+            lambda value: self.ai_confidence_value.setText(f"{value}%"))
+        ai_conf_col.addWidget(self.ai_confidence_slider)
+        self.btn_ai_run = QPushButton("AI로 다시 검출")
+        self.btn_ai_run.setEnabled(False)
+        ai_conf_col.addWidget(self.btn_ai_run)
+        ai_note = QLabel(
+            "참고: yolo_doc_v1은 휴대폰 사진의 단일 문서를 찾는 거친 사각 박스 모델입니다. "
+            "평판 스캔 한 장에 놓인 여러 영수증을 정밀하게 찾는 전용 모델은 아닙니다.")
+        ai_note.setWordWrap(True)
+        ai_note.setStyleSheet("color:#8887ae;font-size:8.5pt")
+        ai_conf_col.addWidget(ai_note)
+        docs.addWidget(ai_conf_group)
         tabs.addTab(docs_tab, "문서 목록")
 
         adjust_tab = QWidget()
@@ -361,6 +388,7 @@ class MainWindow(QMainWindow):
         self.doc_list.currentRowChanged.connect(self.select_region)
         self.btn_select_all.clicked.connect(self.select_all_regions)
         self.btn_ai.clicked.connect(self.load_ai_model)
+        self.btn_ai_run.clicked.connect(self._run_ai_detection)
         self.btn_ruler_h.clicked.connect(lambda: self._start_ruler("horizontal"))
         self.btn_ruler_v.clicked.connect(lambda: self._start_ruler("vertical"))
         self.btn_apply_ruler.clicked.connect(self._apply_ruler)
@@ -417,12 +445,13 @@ class MainWindow(QMainWindow):
         for widget in (self.btn_detect, self.btn_add, self.btn_save_all, self.btn_save_all2,
                        self.btn_save_selected, self.btn_delete, self.btn_redetect,
                        self.btn_select_all, self.btn_ai, self.sensitivity_slider,
-                       self.btn_ruler_h, self.btn_ruler_v, self.btn_apply_ruler,
+                       self.ai_confidence_slider, self.btn_ruler_h, self.btn_ruler_v, self.btn_apply_ruler,
                        self.btn_clear_ruler, self.btn_rotate_90, self.btn_rotate_180,
                        self.btn_rotate_270, self.btn_rotate_ccw, self.btn_flip_h,
                        self.btn_flip_v, self.angle_slider, self.angle_spin,
                        self.btn_apply_angle, self.btn_reset_angle):
             widget.setEnabled(enabled)
+        self.btn_ai_run.setEnabled(enabled and self.ai_detector is not None)
 
     def _format_changed(self):
         is_jpg = self.format_combo.currentIndex() == 1
@@ -652,26 +681,53 @@ class MainWindow(QMainWindow):
             return
         try:
             self.ai_detector = OnnxDocumentDetector(path)
-            self.ai_status.setText(f"AI 모델 준비 완료 · {self.ai_detector.provider}")
+            model_name = Path(path).name
+            input_w, input_h = self.ai_detector.input_w, self.ai_detector.input_h
+            self.ai_status.setText(
+                f"{model_name} 준비 완료 · {self.ai_detector.provider} · 입력 {input_w}×{input_h}px")
+            self.btn_ai_run.setEnabled(self.image is not None)
             self._run_ai_detection()
         except Exception as exc:
             self.ai_detector = None
+            self.btn_ai_run.setEnabled(False)
             QMessageBox.warning(self, "AI 모델을 불러올 수 없음", str(exc))
 
     def _run_ai_detection(self):
         if self.image is None or self.ai_detector is None:
             return
         try:
-            boxes = self.ai_detector.detect(self.image)
+            confidence = self.ai_confidence_slider.value() / 100.0
+            boxes = self.ai_detector.detect(self.image, confidence=confidence)
             for corners in boxes:
                 if not any(np.mean(np.linalg.norm(region.corners - corners, axis=1)) < 35
                            for region in self.regions):
-                    self.regions.append(DocumentRegion(corners, "AI 검출"))
-            self.selected = 0 if self.regions else -1
+                    self.regions.append(DocumentRegion(corners, "AI 사각 박스"))
+            if self.regions:
+                self.selected = min(max(self.selected, 0), len(self.regions) - 1)
+            else:
+                self.selected = -1
             self._refresh_regions()
             if self.selected >= 0:
                 self.select_region(self.selected)
-            self.status.setText(f"AI 검출 완료 · {len(boxes)}개 후보 · {self.ai_detector.provider}")
+            diag = self.ai_detector.last_diagnostics
+            max_conf = diag.get("max_confidence", 0.0)
+            input_size = diag.get("input_size", (0, 0))
+            output_shape = diag.get("output_shape")
+            if boxes:
+                self.ai_status.setText(
+                    f"AI 검출 {len(boxes)}개 · 최고 신뢰도 {max_conf:.1%} · "
+                    f"기준 {confidence:.0%} · 입력 {input_size[0]}×{input_size[1]} · "
+                    f"출력 {output_shape}")
+                self.status.setText(
+                    f"AI 사각 박스 {len(boxes)}개를 찾았습니다. 네 모서리 정밀 검출이 아니므로 경계를 확인하세요.")
+            else:
+                self.ai_status.setText(
+                    f"검출 결과 없음 · 최고 신뢰도 {max_conf:.1%} · 기준 {confidence:.0%} · "
+                    f"입력 {input_size[0]}×{input_size[1]} · 출력 {output_shape}. "
+                    "감도를 낮춰 다시 시도해보세요.")
+                self.status.setText(
+                    f"AI 검출 결과가 없습니다 (최고 신뢰도 {max_conf:.1%}, 기준 {confidence:.0%}). "
+                    "일반 자동 찾기를 함께 사용하세요.")
         except Exception as exc:
             QMessageBox.warning(self, "AI 검출 오류", str(exc))
 
