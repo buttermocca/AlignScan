@@ -715,22 +715,23 @@ class MainWindow(QMainWindow):
                 self.select_region(self.selected)
             diag = self.ai_detector.last_diagnostics
             max_conf = diag.get("max_confidence", 0.0)
+            valid_conf = diag.get("max_valid_confidence", 0.0)
             input_size = diag.get("input_size", (0, 0))
             output_shape = diag.get("output_shape")
             tile_count = diag.get("tile_count", 0)
             rejected = diag.get("full_frame_rejected", 0) + diag.get("tile_rejected", 0)
             if boxes:
                 self.ai_status.setText(
-                    f"AI 문서 후보 {len(boxes)}개 · 최고 점수 {max_conf:.1%} · "
-                    f"기준 {confidence:.0%} · 입력 {input_size[0]}×{input_size[1]} · "
+                    f"AI 문서 후보 {len(boxes)}개 · 유효 후보 최고 {valid_conf:.1%} · "
+                    f"모델 원시 최고 {max_conf:.1%} · 기준 {confidence:.0%} · 입력 {input_size[0]}×{input_size[1]} · "
                     f"분할 검사 {tile_count}회 · 전체면 오검출 제외 {rejected}개")
                 self.status.setText(
                     f"AI가 {len(boxes)}개 후보를 찾았습니다. 결과는 대략적인 사각 박스이므로 "
                     "각 영수증의 네 모서리를 확인해 주세요.")
             else:
                 self.ai_status.setText(
-                    f"유효한 개별 문서 후보 없음 · 최고 점수 {max_conf:.1%} · "
-                    f"기준 {confidence:.0%} · 분할 검사 {tile_count}회 · "
+                    f"유효한 개별 문서 후보 없음 · 모델 원시 최고 {max_conf:.1%} · "
+                    f"유효 후보 최고 {valid_conf:.1%} · 기준 {confidence:.0%} · 분할 검사 {tile_count}회 · "
                     f"전체면 오검출 제외 {rejected}개 · 출력 {output_shape}")
                 self.status.setText(
                     "AI가 스캔 전체 영역을 문서로 착각했거나 개별 영수증 후보를 찾지 못했습니다. "
