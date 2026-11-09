@@ -263,7 +263,7 @@ class MainWindow(QMainWindow):
         angle_row = QHBoxLayout()
         angle_row.addWidget(QLabel("각도"))
         self.angle_slider = QSlider(Qt.Horizontal)
-        self.angle_slider.setRange(-180, 180)
+        self.angle_slider.setRange(-1800, 1800)
         self.angle_slider.setValue(0)
         self.angle_spin = QDoubleSpinBox()
         self.angle_spin.setRange(-180.0, 180.0)
@@ -280,8 +280,8 @@ class MainWindow(QMainWindow):
         angle_actions.addWidget(self.btn_apply_angle)
         angle_actions.addWidget(self.btn_reset_angle)
         angle_col.addLayout(angle_actions)
-        self.angle_slider.valueChanged.connect(self.angle_spin.setValue)
-        self.angle_spin.valueChanged.connect(lambda value: self.angle_slider.setValue(round(value)))
+        self.angle_slider.valueChanged.connect(lambda value: self.angle_spin.setValue(value / 10.0))
+        self.angle_spin.valueChanged.connect(lambda value: self.angle_slider.setValue(round(value * 10)))
         rotate_col.addWidget(angle_group)
 
         ruler_help = QLabel(
