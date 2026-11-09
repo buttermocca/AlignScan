@@ -5,7 +5,7 @@ import math
 import numpy as np
 
 from PySide6.QtCore import Qt, Signal, QPointF, QRectF
-from PySide6.QtGui import (QPainter, QPen, QBrush, QPixmap, QColor, QPolygonF,
+from PySide6.QtGui import (QPainter, QPen, QBrush, QPixmap, QImage, QColor, QPolygonF,
                            QPainterPath, QWheelEvent, QMouseEvent)
 from PySide6.QtWidgets import QWidget
 
@@ -44,7 +44,7 @@ class ScanCanvas(QWidget):
         self._pan = QPointF(0, 0)
         self._pan_anchor: QPointF | None = None
         self._last_mouse = QPointF(-1000, -1000)
-        self._magnifier_factor = 3.0
+        self._magnifier_factor = 4.5
 
     @property
     def zoom_percent(self) -> int:
@@ -157,12 +157,12 @@ class ScanCanvas(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.fillRect(self.rect(), QColor("#f1f3ff"))
-        painter.setPen(QPen(QColor("#dcdafa"), 1))
+        painter.fillRect(self.rect(), QColor("#eff3ee"))
+        painter.setPen(QPen(QColor("#dce6dc"), 1))
         painter.setBrush(QColor("#ffffff"))
         painter.drawRoundedRect(self.rect().adjusted(8, 8, -8, -8), 18, 18)
         if self.pixmap.isNull():
-            painter.setPen(QColor("#7773a8"))
+            painter.setPen(QColor("#72877a"))
             painter.drawText(self.rect(), Qt.AlignCenter,
                              "스캔 이미지를 여기에 끌어놓으세요 ♡\n\n"
                              "마우스 휠로 확대·축소하고 가운데 버튼으로 이동할 수 있어요\n"
@@ -217,7 +217,7 @@ class ScanCanvas(QWidget):
         # Canvas HUD remains legible over the scanned image.
         hud = QRectF(18, 16, 116, 30)
         painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor(44, 48, 89, 205))
+        painter.setBrush(QColor(89, 112, 97, 205))
         painter.drawRoundedRect(hud, 10, 10)
         painter.setPen(QColor("#ffffff"))
         painter.drawText(hud, Qt.AlignCenter, f"  {self.zoom_percent}%  ·  휠 확대")
@@ -238,50 +238,80 @@ class ScanCanvas(QWidget):
         painter.drawText(mid + QPointF(8, -8), label)
 
     def _draw_magnifier(self, painter: QPainter):
+        """Draw a cursor-centred loupe, preserving white space beyond image edges."""
         if self.pixmap.isNull():
             return
         self._transform()
         cursor = self._last_mouse
         image_point = self.widget_to_image(cursor)
-        diameter = 154.0
+
+        diameter = 188.0
         zoom = self._magnifier_factor
         source_side = diameter / max(zoom * self._scale, 0.001)
-        image_w, image_h = self.pixmap.width(), self.pixmap.height()
-        source_side = min(source_side, image_w, image_h)
-        left = min(max(0.0, float(image_point[0]) - source_side / 2), image_w - source_side)
-        top = min(max(0.0, float(image_point[1]) - source_side / 2), image_h - source_side)
-        src = QRectF(left, top, source_side, source_side)
+        source_side = max(24.0, source_side)
 
-        mag_x = cursor.x() + 28
-        mag_y = cursor.y() + 28
-        if mag_x + diameter > self.width() - 10:
-            mag_x = cursor.x() - diameter - 28
-        if mag_y + diameter > self.height() - 10:
-            mag_y = cursor.y() - diameter - 28
-        mag_x = min(max(10.0, mag_x), self.width() - diameter - 10)
-        mag_y = min(max(10.0, mag_y), self.height() - diameter - 10)
+        # Keep the cursor's image coordinate exactly in the centre of the source
+        # square. Do NOT clamp the source rectangle to the image bounds: doing so
+        # shifts the receipt edge out of the lens when the cursor is near an edge.
+        source_left = float(image_point[0]) - source_side / 2.0
+        source_top = float(image_point[1]) - source_side / 2.0
+        source_rect = QRectF(source_left, source_top, source_side, source_side)
+
+        image = self.pixmap.toImage().convertToFormat(QImage.Format_RGB32)
+        patch_size = max(2, int(round(source_side)))
+        patch = QImage(patch_size, patch_size, QImage.Format_RGB32)
+        patch.fill(QColor("#fffefa"))
+        image_bounds = QRectF(0, 0, image.width(), image.height())
+        intersection = source_rect.intersected(image_bounds)
+        if not intersection.isEmpty():
+            # Map the valid source intersection into the same location inside
+            # the square patch. Areas outside the scan remain soft white, while
+            # the crosshair stays locked on the actual cursor point.
+            target_left = (intersection.left() - source_rect.left()) / source_side * patch_size
+            target_top = (intersection.top() - source_rect.top()) / source_side * patch_size
+            target_width = intersection.width() / source_side * patch_size
+            target_height = intersection.height() / source_side * patch_size
+            patch_painter = QPainter(patch)
+            patch_painter.setRenderHint(QPainter.SmoothPixmapTransform)
+            patch_painter.drawImage(
+                QRectF(target_left, target_top, target_width, target_height),
+                image, intersection)
+            patch_painter.end()
+
+        # Put the loupe opposite the mouse pointer. This is important for a
+        # receipt that sits at the right edge of the scanner sheet: the circle
+        # moves to the left instead of covering the edge or being clipped.
+        gap = 22.0
+        mag_x = cursor.x() - diameter - gap if cursor.x() > self.width() * 0.52 else cursor.x() + gap
+        mag_y = cursor.y() - diameter - gap if cursor.y() > self.height() * 0.56 else cursor.y() + gap
+        mag_x = min(max(10.0, mag_x), max(10.0, self.width() - diameter - 10.0))
+        mag_y = min(max(10.0, mag_y), max(10.0, self.height() - diameter - 28.0))
         target = QRectF(mag_x, mag_y, diameter, diameter)
 
-        path = QPainterPath()
-        path.addEllipse(target)
+        clip = QPainterPath()
+        clip.addEllipse(target)
         painter.save()
-        painter.setClipPath(path)
-        painter.fillRect(target, QColor("#ffffff"))
+        painter.setClipPath(clip)
+        painter.fillRect(target, QColor("#fffefa"))
         painter.setRenderHint(QPainter.SmoothPixmapTransform)
-        painter.drawPixmap(target, self.pixmap, src)
+        painter.drawImage(target, patch, QRectF(patch.rect()))
         center = target.center()
-        painter.setPen(QPen(QColor(255, 83, 131, 210), 1))
-        painter.drawLine(QPointF(center.x() - 18, center.y()), QPointF(center.x() + 18, center.y()))
-        painter.drawLine(QPointF(center.x(), center.y() - 18), QPointF(center.x(), center.y() + 18))
+        painter.setPen(QPen(QColor(239, 113, 143, 225), 1.5))
+        painter.drawLine(QPointF(center.x() - 16, center.y()),
+                         QPointF(center.x() + 16, center.y()))
+        painter.drawLine(QPointF(center.x(), center.y() - 16),
+                         QPointF(center.x(), center.y() + 16))
         painter.restore()
+
         painter.setPen(QPen(QColor("#ffffff"), 5))
         painter.setBrush(Qt.NoBrush)
         painter.drawEllipse(target)
-        painter.setPen(QPen(QColor("#726ed1"), 3))
+        painter.setPen(QPen(QColor("#a9bda9"), 3))
         painter.drawEllipse(target)
-        painter.setPen(QColor("#55548f"))
-        painter.drawText(QRectF(mag_x - 3, mag_y + diameter + 2, diameter + 6, 20),
-                         Qt.AlignCenter, "3× 확대 · 정밀 모서리 지정")
+        label_rect = QRectF(mag_x - 8, mag_y + diameter + 2, diameter + 16, 20)
+        painter.setPen(QColor("#60776a"))
+        painter.drawText(label_rect, Qt.AlignCenter,
+                         f"{zoom:g}× 확대 · 모서리 정밀 확인")
 
     def mousePressEvent(self, event: QMouseEvent):
         self._last_mouse = event.position()
