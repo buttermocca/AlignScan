@@ -462,6 +462,8 @@ class MainWindow(QMainWindow):
         self.image_path = path
         self.ruler_line = None
         self.canvas.clear_ruler_line()
+        self.canvas.set_add_mode(False)
+        self.canvas.set_ruler_mode(None)
         self.btn_apply_ruler.setEnabled(False)
         self.btn_clear_ruler.setEnabled(False)
         self._preview_region = -1
@@ -708,6 +710,8 @@ class MainWindow(QMainWindow):
         self.regions = transformed
         self.ruler_line = None
         self.canvas.clear_ruler_line()
+        self.canvas.set_add_mode(False)
+        self.canvas.set_ruler_mode(None)
         self.btn_apply_ruler.setEnabled(False)
         self.btn_clear_ruler.setEnabled(False)
 
