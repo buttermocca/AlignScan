@@ -1,19 +1,22 @@
 from __future__ import annotations
+from pathlib import Path
+import numpy as np
 from PySide6.QtCore import Qt, Signal, QPointF, QRectF
 from PySide6.QtGui import QPainter, QPen, QBrush, QPixmap, QColor, QPolygonF
 from PySide6.QtWidgets import QWidget
-import numpy as np
 
 
 class ScanCanvas(QWidget):
     region_selected = Signal(int)
     polygon_created = Signal(object)
     polygon_changed = Signal(int, object)
+    image_dropped = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMinimumSize(500, 420)
         self.setMouseTracking(True)
+        self.setAcceptDrops(True)
         self.pixmap = QPixmap()
         self.regions: list[np.ndarray] = []
         self.selected = -1
@@ -60,13 +63,14 @@ class ScanCanvas(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.fillRect(self.rect(), QColor("#f6f8f7"))
-        painter.setPen(QPen(QColor("#d7e5df"), 1))
+        painter.fillRect(self.rect(), QColor("#f1f3ff"))
+        painter.setPen(QPen(QColor("#dcdafa"), 1))
         painter.setBrush(QColor("#ffffff"))
         painter.drawRoundedRect(self.rect().adjusted(8, 8, -8, -8), 18, 18)
         if self.pixmap.isNull():
-            painter.setPen(QColor("#7c9288"))
-            painter.drawText(self.rect(), Qt.AlignCenter, "스캔 이미지를 열어주세요\n\n여러 장의 영수증·카드가 있는 이미지도\n한 번에 불러올 수 있어요 ♡")
+            painter.setPen(QColor("#7773a8"))
+            painter.drawText(self.rect(), Qt.AlignCenter,
+                             "스캔 이미지를 여기에 끌어놓으세요 ♡\n\n여러 장의 영수증·카드를\n자동으로 찾아 반듯하게 정렬합니다")
             return
         self._transform()
         painter.setRenderHint(QPainter.SmoothPixmapTransform)
@@ -74,14 +78,15 @@ class ScanCanvas(QWidget):
         for idx, poly in enumerate(self.regions):
             polygon = QPolygonF([self.image_to_widget(p) for p in poly])
             selected = idx == self.selected
-            color = QColor("#ff7d91") if selected else QColor("#4bb99a")
+            color = QColor("#ff7396") if selected else QColor("#4eb99c")
             painter.setPen(QPen(color, 3 if selected else 2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-            painter.setBrush(QColor(color.red(), color.green(), color.blue(), 26))
+            painter.setBrush(QColor(color.red(), color.green(), color.blue(), 25))
             painter.drawPolygon(polygon)
             if selected:
                 for p in poly:
                     q = self.image_to_widget(p)
-                    painter.setPen(QPen(Qt.white, 2)); painter.setBrush(QBrush(color))
+                    painter.setPen(QPen(Qt.white, 2))
+                    painter.setBrush(QBrush(color))
                     painter.drawEllipse(q, 6, 6)
             center = polygon.boundingRect().center()
             painter.setPen(QPen(QColor("#ffffff"), 4))
@@ -89,10 +94,10 @@ class ScanCanvas(QWidget):
             painter.setPen(QPen(color, 1))
             painter.drawText(center, str(idx + 1))
         if self.draft:
-            painter.setPen(QPen(QColor("#ff9d42"), 2, Qt.DashLine))
+            painter.setPen(QPen(QColor("#8d83ed"), 2, Qt.DashLine))
             painter.setBrush(Qt.NoBrush)
-            for p in self.draft:
-                painter.drawEllipse(p, 5, 5)
+            for point in self.draft:
+                painter.drawEllipse(point, 5, 5)
             if len(self.draft) > 1:
                 painter.drawPolyline(QPolygonF(self.draft))
 
@@ -107,27 +112,48 @@ class ScanCanvas(QWidget):
                 self.draft.clear()
                 self.add_mode = False
                 self.setCursor(Qt.ArrowCursor)
-            self.update(); return
-        if self.selected >= 0 and self.selected < len(self.regions):
-            for corner_idx, p in enumerate(self.regions[self.selected]):
-                q = self.image_to_widget(p)
-                if (q - event.position()).manhattanLength() < 16:
+            self.update()
+            return
+        if 0 <= self.selected < len(self.regions):
+            for corner_idx, point in enumerate(self.regions[self.selected]):
+                if (self.image_to_widget(point) - event.position()).manhattanLength() < 16:
                     self.drag_corner = (self.selected, corner_idx)
                     return
         for idx in reversed(range(len(self.regions))):
-            poly = QPolygonF([self.image_to_widget(p) for p in self.regions[idx]])
-            if poly.containsPoint(event.position(), Qt.OddEvenFill):
+            polygon = QPolygonF([self.image_to_widget(p) for p in self.regions[idx]])
+            if polygon.containsPoint(event.position(), Qt.OddEvenFill):
                 self.region_selected.emit(idx)
                 return
 
     def mouseMoveEvent(self, event):
-        if self.drag_corner is not None:
-            idx, corner = self.drag_corner
-            points = self.regions[idx].copy()
-            points[corner] = self.widget_to_image(event.position())
-            self.regions[idx] = points
-            self.polygon_changed.emit(idx, points)
-            self.update()
+        if self.drag_corner is None:
+            return
+        idx, corner = self.drag_corner
+        points = self.regions[idx].copy()
+        points[corner] = self.widget_to_image(event.position())
+        self.regions[idx] = points
+        self.polygon_changed.emit(idx, points)
+        self.update()
 
     def mouseReleaseEvent(self, event):
         self.drag_corner = None
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls() and any(
+            url.isLocalFile() and Path(url.toLocalFile()).suffix.lower() in
+            {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
+            for url in event.mimeData().urls()
+        ):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        for url in event.mimeData().urls():
+            if url.isLocalFile():
+                path = url.toLocalFile()
+                if Path(path).suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}:
+                    self.image_dropped.emit(path)
+                    event.acceptProposedAction()
+                    return
+        event.ignore()
