@@ -12,7 +12,6 @@ from .geometry import DocumentRegion, detect_document_regions, rectify_document
 from .imaging import enhance_image
 from .canvas import ScanCanvas
 from .preview import ZoomPreview
-from .ai_detector import OnnxDocumentDetector
 from .transforms import (rotate_quarter, rotate_expand, flip_image,
                          transform_points, ruler_correction_angle)
 
@@ -39,7 +38,6 @@ class MainWindow(QMainWindow):
         self.regions: list[DocumentRegion] = []
         self.selected = -1
         self.ruler_line: tuple[np.ndarray, np.ndarray, str] | None = None
-        self.ai_detector: OnnxDocumentDetector | None = None
         self.preview_timer = QTimer(self)
         self.preview_timer.setSingleShot(True)
         self.preview_timer.setInterval(160)
@@ -54,26 +52,26 @@ class MainWindow(QMainWindow):
 
     def _build_ui(self):
         self.setStyleSheet("""
-        QMainWindow,QWidget{background:#f5f6ff;color:#3d4169;font-family:'Malgun Gothic','맑은 고딕';font-size:10pt}
-        QFrame#topbar{background:#fffaff;border:1px solid #dedcff;border-radius:20px}
-        QLabel#brand{font-size:21pt;font-weight:900;color:#4b4da0}
-        QLabel#hint{color:#8887ae;font-size:9pt}
-        QPushButton{background:#fff;border:1px solid #dcdafa;border-radius:12px;padding:8px 13px;color:#55548f;font-weight:700}
-        QPushButton:hover{background:#f4f0ff;border-color:#a7a4ee}
-        QPushButton#primary{background:#7773df;color:white;border:0;font-weight:900}
-        QPushButton#primary:hover{background:#625ed0}
-        QPushButton#mint{background:#68c4ad;color:white;border:0}
-        QGroupBox{border:1px solid #e2def9;border-radius:15px;margin-top:12px;padding:12px 9px 8px;font-weight:800;background:#fffaff}
-        QGroupBox::title{subcontrol-origin:margin;left:12px;padding:0 5px;color:#6462ad}
-        QListWidget{border:1px solid #e2def9;border-radius:13px;background:white;padding:5px}
+        QMainWindow,QWidget{background:#f1f4ef;color:#4b5d54;font-family:'Malgun Gothic','맑은 고딕';font-size:10pt}
+        QFrame#topbar{background:#fffdf8;border:1px solid #e3e8df;border-radius:20px}
+        QLabel#brand{font-size:21pt;font-weight:900;color:#526e62}
+        QLabel#hint{color:#8b9b91;font-size:9pt}
+        QPushButton{background:#fffefb;border:1px solid #dce5dc;border-radius:12px;padding:8px 13px;color:#597064;font-weight:700}
+        QPushButton:hover{background:#f1f7f1;border-color:#afcbbb}
+        QPushButton#primary{background:#91bca3;color:#ffffff;border:0;font-weight:900}
+        QPushButton#primary:hover{background:#7fae94}
+        QPushButton#mint{background:#d6e8da;color:#526e62;border:1px solid #c4ddcb}
+        QGroupBox{border:1px solid #e3e9e0;border-radius:15px;margin-top:12px;padding:12px 9px 8px;font-weight:800;background:#fffefb}
+        QGroupBox::title{subcontrol-origin:margin;left:12px;padding:0 5px;color:#658272}
+        QListWidget{border:1px solid #e3e9e0;border-radius:13px;background:#fffefc;padding:5px}
         QListWidget::item{padding:10px;border-radius:9px;margin:2px}
-        QListWidget::item:selected{background:#f1edff;color:#514c9a}
-        QSlider::groove:horizontal{height:6px;background:#e2e0f5;border-radius:3px}
-        QSlider::handle:horizontal{background:#7773df;border:2px solid white;width:16px;margin:-6px 0;border-radius:9px}
-        QSpinBox,QComboBox,QLineEdit{background:white;border:1px solid #dcdafa;border-radius:9px;padding:6px}
-        QTabWidget::pane{border:1px solid #e2def9;border-radius:13px;background:#fffaff}
-        QTabBar::tab{padding:9px 14px;background:#eeedff;border-radius:9px;margin:3px;color:#66639e}
-        QTabBar::tab:selected{background:#ffeaf1;color:#a04d78;font-weight:800}
+        QListWidget::item:selected{background:#f6e9eb;color:#805c64}
+        QSlider::groove:horizontal{height:6px;background:#e4ebe2;border-radius:3px}
+        QSlider::handle:horizontal{background:#91bca3;border:2px solid white;width:16px;margin:-6px 0;border-radius:9px}
+        QSpinBox,QDoubleSpinBox,QComboBox,QLineEdit{background:#fffefb;border:1px solid #dce5dc;border-radius:9px;padding:6px}
+        QTabWidget::pane{border:1px solid #e3e9e0;border-radius:13px;background:#fffefb}
+        QTabBar::tab{padding:9px 14px;background:#edf2eb;border-radius:9px;margin:3px;color:#718579}
+        QTabBar::tab:selected{background:#f6e9eb;color:#936b73;font-weight:800}
         """)
         root = QWidget()
         self.setCentralWidget(root)
@@ -92,10 +90,13 @@ class MainWindow(QMainWindow):
         top_row.addLayout(brand_col)
         mascot = QLabel()
         asset_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent)) / "assets"
-        banner = QPixmap(str(asset_root / "mascot_banner.png"))
+        banner = QPixmap(str(asset_root / "mascot_banner.jpg"))
+        if banner.isNull():
+            banner = QPixmap(str(asset_root / "mascot_banner.png"))
         if not banner.isNull():
-            mascot.setPixmap(banner.scaledToHeight(82, Qt.SmoothTransformation))
-            mascot.setMaximumWidth(250)
+            mascot.setPixmap(banner.scaledToHeight(86, Qt.SmoothTransformation))
+            mascot.setMaximumWidth(270)
+            mascot.setMinimumWidth(175)
             top_row.addWidget(mascot)
         top_row.addStretch()
         self.btn_open = QPushButton("＋ 이미지 열기")
@@ -191,41 +192,18 @@ class MainWindow(QMainWindow):
         docs.addWidget(self.doc_list, 1)
         buttons = QHBoxLayout()
         self.btn_select_all = QPushButton("전체 선택")
-        self.btn_ai = QPushButton("AI 모델 찾기")
+        self.btn_select_all.setMinimumHeight(38)
         buttons.addWidget(self.btn_select_all)
-        buttons.addWidget(self.btn_ai)
         docs.addLayout(buttons)
-        self.ai_status = QLabel("AI 모델 미선택 · 기본 자동 찾기는 바로 사용할 수 있어요.")
-        self.ai_status.setWordWrap(True)
-        self.ai_status.setStyleSheet("color:#8887ae;font-size:8.5pt")
-        docs.addWidget(self.ai_status)
-        ai_conf_group = QGroupBox("AI 검출 신뢰도")
-        ai_conf_col = QVBoxLayout(ai_conf_group)
-        ai_conf_head = QHBoxLayout()
-        ai_conf_head.addWidget(QLabel("낮음 · 더 많이 검출"))
-        ai_conf_head.addStretch()
-        self.ai_confidence_value = QLabel("25%")
-        self.ai_confidence_value.setStyleSheet("color:#7773df;font-weight:900")
-        ai_conf_head.addWidget(self.ai_confidence_value)
-        ai_conf_head.addStretch()
-        ai_conf_head.addWidget(QLabel("높음 · 더 엄격하게"))
-        ai_conf_col.addLayout(ai_conf_head)
-        self.ai_confidence_slider = QSlider(Qt.Horizontal)
-        self.ai_confidence_slider.setRange(5, 80)
-        self.ai_confidence_slider.setValue(25)
-        self.ai_confidence_slider.valueChanged.connect(
-            lambda value: self.ai_confidence_value.setText(f"{value}%"))
-        ai_conf_col.addWidget(self.ai_confidence_slider)
-        self.btn_ai_run = QPushButton("AI로 다시 검출")
-        self.btn_ai_run.setEnabled(False)
-        ai_conf_col.addWidget(self.btn_ai_run)
-        ai_note = QLabel(
-            "참고: yolo_doc_v1은 휴대폰 사진의 단일 문서를 찾는 거친 사각 박스 모델입니다. "
-            "평판 스캔 한 장에 놓인 여러 영수증을 정밀하게 찾는 전용 모델은 아닙니다.")
-        ai_note.setWordWrap(True)
-        ai_note.setStyleSheet("color:#8887ae;font-size:8.5pt")
-        ai_conf_col.addWidget(ai_note)
-        docs.addWidget(ai_conf_group)
+        guide = QLabel(
+            "영수증을 선택하면 오른쪽 미리보기에서 확대해 확인할 수 있어요.\n"
+            "원본 화면의 색상 모서리 점을 움직여 크롭 경계를 세밀하게 맞춰보세요. ♡")
+        guide.setWordWrap(True)
+        guide.setAlignment(Qt.AlignCenter)
+        guide.setStyleSheet(
+            "color:#788d80;background:#f1f6ef;border:1px solid #e2eadf;"
+            "border-radius:12px;padding:14px;font-size:9pt;")
+        docs.addWidget(guide)
         tabs.addTab(docs_tab, "문서 목록")
 
         adjust_tab = QWidget()
@@ -387,8 +365,6 @@ class MainWindow(QMainWindow):
         self.btn_folder.clicked.connect(self.choose_output_folder)
         self.doc_list.currentRowChanged.connect(self.select_region)
         self.btn_select_all.clicked.connect(self.select_all_regions)
-        self.btn_ai.clicked.connect(self.load_ai_model)
-        self.btn_ai_run.clicked.connect(self._run_ai_detection)
         self.btn_ruler_h.clicked.connect(lambda: self._start_ruler("horizontal"))
         self.btn_ruler_v.clicked.connect(lambda: self._start_ruler("vertical"))
         self.btn_apply_ruler.clicked.connect(self._apply_ruler)
@@ -444,15 +420,13 @@ class MainWindow(QMainWindow):
     def _set_controls_enabled(self, enabled: bool):
         for widget in (self.btn_detect, self.btn_add, self.btn_save_all, self.btn_save_all2,
                        self.btn_save_selected, self.btn_delete, self.btn_redetect,
-                       self.btn_select_all, self.btn_ai, self.sensitivity_slider,
-                       self.ai_confidence_slider, self.btn_ruler_h, self.btn_ruler_v, self.btn_apply_ruler,
+                       self.btn_select_all, self.sensitivity_slider,
+                       self.btn_ruler_h, self.btn_ruler_v, self.btn_apply_ruler,
                        self.btn_clear_ruler, self.btn_rotate_90, self.btn_rotate_180,
                        self.btn_rotate_270, self.btn_rotate_ccw, self.btn_flip_h,
                        self.btn_flip_v, self.angle_slider, self.angle_spin,
                        self.btn_apply_angle, self.btn_reset_angle):
             widget.setEnabled(enabled)
-        self.btn_ai_run.setEnabled(enabled and self.ai_detector is not None)
-
     def _format_changed(self):
         is_jpg = self.format_combo.currentIndex() == 1
         self.quality_slider.setEnabled(is_jpg)
@@ -673,72 +647,6 @@ class MainWindow(QMainWindow):
                                     f"총 {len(results)}개 파일을 저장했습니다.\n\n{folder}")
         except Exception as exc:
             QMessageBox.critical(self, "저장 오류", str(exc))
-
-    def load_ai_model(self):
-        path, _ = QFileDialog.getOpenFileName(
-            self, "문서 검출 ONNX 모델 선택", "", "ONNX 모델 (*.onnx)")
-        if not path:
-            return
-        try:
-            self.ai_detector = OnnxDocumentDetector(path)
-            model_name = Path(path).name
-            input_w, input_h = self.ai_detector.input_w, self.ai_detector.input_h
-            self.ai_status.setText(
-                f"{model_name} 준비 완료 · {self.ai_detector.provider} · 입력 {input_w}×{input_h}px")
-            self.btn_ai_run.setEnabled(self.image is not None)
-            self._run_ai_detection()
-        except Exception as exc:
-            self.ai_detector = None
-            self.btn_ai_run.setEnabled(False)
-            QMessageBox.warning(self, "AI 모델을 불러올 수 없음", str(exc))
-
-    def _run_ai_detection(self):
-        if self.image is None or self.ai_detector is None:
-            return
-        try:
-            confidence = self.ai_confidence_slider.value() / 100.0
-            # Remove the previous AI proposal set before appending a fresh run.
-            # Keep the independent classical/manual regions intact.
-            self.regions = [region for region in self.regions
-                            if not region.label.startswith("AI ")]
-            boxes = self.ai_detector.detect(self.image, confidence=confidence)
-            for corners in boxes:
-                if not any(np.mean(np.linalg.norm(region.corners - corners, axis=1)) < 35
-                           for region in self.regions):
-                    self.regions.append(DocumentRegion(corners, "AI 문서 후보"))
-            if self.regions:
-                self.selected = min(max(self.selected, 0), len(self.regions) - 1)
-            else:
-                self.selected = -1
-            self._refresh_regions()
-            if self.selected >= 0:
-                self.select_region(self.selected)
-            diag = self.ai_detector.last_diagnostics
-            max_conf = diag.get("max_confidence", 0.0)
-            valid_conf = diag.get("max_valid_confidence", 0.0)
-            input_size = diag.get("input_size", (0, 0))
-            output_shape = diag.get("output_shape")
-            tile_count = diag.get("tile_count", 0)
-            rejected = diag.get("full_frame_rejected", 0) + diag.get("tile_rejected", 0)
-            if boxes:
-                self.ai_status.setText(
-                    f"AI 문서 후보 {len(boxes)}개 · 유효 후보 최고 {valid_conf:.1%} · "
-                    f"모델 원시 최고 {max_conf:.1%} · 기준 {confidence:.0%} · 입력 {input_size[0]}×{input_size[1]} · "
-                    f"분할 검사 {tile_count}회 · 전체면 오검출 제외 {rejected}개")
-                self.status.setText(
-                    f"AI가 {len(boxes)}개 후보를 찾았습니다. 결과는 대략적인 사각 박스이므로 "
-                    "각 영수증의 네 모서리를 확인해 주세요.")
-            else:
-                self.ai_status.setText(
-                    f"유효한 개별 문서 후보 없음 · 모델 원시 최고 {max_conf:.1%} · "
-                    f"유효 후보 최고 {valid_conf:.1%} · 기준 {confidence:.0%} · 분할 검사 {tile_count}회 · "
-                    f"전체면 오검출 제외 {rejected}개 · 출력 {output_shape}")
-                self.status.setText(
-                    "AI가 스캔 전체 영역을 문서로 착각했거나 개별 영수증 후보를 찾지 못했습니다. "
-                    "기본 자동 찾기(윤곽선) 또는 직접 모서리 지정을 사용해 주세요.")
-        except Exception as exc:
-            QMessageBox.warning(self, "AI 검출 오류", str(exc))
-
 
     def _start_ruler(self, orientation: str):
         if self.image is None:
