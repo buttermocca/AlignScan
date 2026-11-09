@@ -35,3 +35,11 @@
 - Added runtime diagnostics: model input size, output tensor shape, maximum confidence, candidate and kept detection counts.
 - Clarified that yolo_doc_v1 is a single-class coarse axis-aligned document-box detector, not a four-corner or multi-receipt flatbed scan model.
 - Added ONNX output-layout and 960px letterbox regression tests.
+
+## 1.2.2
+- Rejected YOLO predictions that cover at least 88% of the current image/window to prevent the full scanner page from being reported as one receipt.
+- Added overlapping left/right and top/bottom tile inference when the full image yields fewer than two valid document boxes.
+- Merged duplicate detections from overlapping windows with global NMS.
+- Removed stale AI proposal rectangles before each AI rerun.
+- AI status now reports tile inference count and full-frame false-positive rejection count.
+- Added tests for multi-window coverage on the previously reported 2527×3369 scan dimensions.
