@@ -43,3 +43,12 @@
 - Removed stale AI proposal rectangles before each AI rerun.
 - AI status now reports tile inference count and full-frame false-positive rejection count.
 - Added tests for multi-window coverage on the previously reported 2527×3369 scan dimensions.
+
+## 1.3.0
+- Removed all AI model loading, confidence controls, inference diagnostics, and ONNX Runtime dependencies from the desktop application.
+- Replaced the document-list AI panel with concise manual-editing guidance.
+- Updated the main application palette to muted sage, ivory and soft rose pastels.
+- Added high-detail chibi girl and cat mascot banner artwork to the application header.
+- Changed the corner loupe to 4.5× magnification and keep the pointer exactly at the lens centre.
+- Extended the loupe's source patch beyond the scan edges with a soft white fill, so a document's edge remains visible instead of being shifted out of view.
+- Positioned the loupe on the opposite side of the pointer to avoid covering documents near the right edge.
