@@ -18,3 +18,12 @@
 - Cached downscaled preview source and lighter live-preview denoising/dust cleanup.
 - Updated pastel lavender interface and cute receipt/girl/cat mascot banner.
 - Windows packaging switched to onedir for faster cold startup (keep the complete folder together).
+
+## 1.2.0
+- Added mouse-wheel zoom to the main scan canvas (10–1200%) and panning with middle/right mouse buttons.
+- Added a live 3× magnifier around the pointer while manually placing crop corners and dragging corner handles.
+- Added horizontal and vertical ruler drawing; apply the guide to deskew the complete image and remap all detected document corners.
+- Added exact 90°, 180°, 270° clockwise rotations, 90° counter-clockwise rotation, and horizontal/vertical flips.
+- Added manual arbitrary-angle rotation with synchronized slider and numeric input.
+- Added affine point transforms so existing crop regions follow rotate/flip/deskew changes.
+- Added unit tests for rotation, flip, arbitrary-angle canvas expansion, and ruler-based deskew.
