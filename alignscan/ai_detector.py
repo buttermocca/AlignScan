@@ -84,7 +84,7 @@ class OnnxDocumentDetector:
 
         # YOLO11 single-class detect exports as (5, N); alternate exporters
         # may expose (N, 5). Do not transpose the latter.
-        if pred.shape[0] <= 16 and pred.shape[1] > pred.shape[0]:
+        if pred.shape[0] <= 16 and pred.shape[1] > 16:
             pred = pred.T
         if pred.shape[1] < 5:
             raise RuntimeError(
