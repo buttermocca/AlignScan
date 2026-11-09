@@ -278,12 +278,50 @@ class ScanCanvas(QWidget):
                 image, intersection)
             patch_painter.end()
 
-        # Put the loupe opposite the mouse pointer. This is important for a
-        # receipt that sits at the right edge of the scanner sheet: the circle
-        # moves to the left instead of covering the edge or being clipped.
-        gap = 22.0
-        mag_x = cursor.x() - diameter - gap if cursor.x() > self.width() * 0.52 else cursor.x() + gap
-        mag_y = cursor.y() - diameter - gap if cursor.y() > self.height() * 0.56 else cursor.y() + gap
+        # Prefer blank canvas margins outside the scanned sheet. This keeps
+        # the loupe from covering the second receipt while the cursor is on the
+        # right-hand receipt edge. If the view is zoomed and no outer margin is
+        # available, fall back to the side opposite the pointer.
+        gap = 12.0
+        image_left = self._offset.x()
+        image_top = self._offset.y()
+        image_right = image_left + self.pixmap.width() * self._scale
+        image_bottom = image_top + self.pixmap.height() * self._scale
+        right_margin = self.width() - image_right
+        left_margin = image_left
+        bottom_margin = self.height() - image_bottom
+        top_margin = image_top
+
+        if cursor.x() >= (image_left + image_right) / 2:
+            if right_margin >= diameter + gap:
+                mag_x = image_right + gap
+            elif left_margin >= diameter + gap:
+                mag_x = image_left - diameter - gap
+            else:
+                mag_x = cursor.x() - diameter - 22.0
+        else:
+            if left_margin >= diameter + gap:
+                mag_x = image_left - diameter - gap
+            elif right_margin >= diameter + gap:
+                mag_x = image_right + gap
+            else:
+                mag_x = cursor.x() + 22.0
+
+        if cursor.y() >= (image_top + image_bottom) / 2:
+            if bottom_margin >= diameter + 30:
+                mag_y = image_bottom + 8.0
+            elif top_margin >= diameter + 30:
+                mag_y = image_top - diameter - 8.0
+            else:
+                mag_y = cursor.y() - diameter - 22.0
+        else:
+            if top_margin >= diameter + 30:
+                mag_y = image_top - diameter - 8.0
+            elif bottom_margin >= diameter + 30:
+                mag_y = image_bottom + 8.0
+            else:
+                mag_y = cursor.y() + 22.0
+
         mag_x = min(max(10.0, mag_x), max(10.0, self.width() - diameter - 10.0))
         mag_y = min(max(10.0, mag_y), max(10.0, self.height() - diameter - 28.0))
         target = QRectF(mag_x, mag_y, diameter, diameter)
