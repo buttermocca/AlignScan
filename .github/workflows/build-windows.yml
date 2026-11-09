@@ -31,7 +31,7 @@ jobs:
         run: python -c "from alignscan.asset_generator import ensure_assets; ensure_assets('assets')"
       - name: Build fast-start Windows application folder
         shell: cmd
-        run: pyinstaller --noconfirm --clean --windowed --onedir --name AlignScan --icon assets\app_icon.ico --add-data "assets;assets" --collect-all PySide6 --collect-all cv2 --collect-all onnxruntime --exclude-module matplotlib --exclude-module scipy --exclude-module torch --exclude-module torchvision --exclude-module ultralytics app.py
+        run: pyinstaller --noconfirm --clean --windowed --onedir --name AlignScan --icon assets\app_icon.ico --add-data "assets;assets" --collect-all PySide6 --collect-all cv2 --exclude-module matplotlib --exclude-module scipy --exclude-module torch --exclude-module torchvision --exclude-module ultralytics app.py
       - name: Include quick start guide
         run: Copy-Item README.md dist/AlignScan/README.txt
       - name: Upload Windows application
