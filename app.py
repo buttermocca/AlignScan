@@ -1,6 +1,8 @@
 from __future__ import annotations
+import os
 import sys
 from pathlib import Path
+import cv2
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
@@ -15,6 +17,11 @@ def resource_path(relative: str) -> str:
 
 
 def main():
+    # Avoid oversubscribing CPU threads on mobile Ryzen laptops. Four workers
+    # benchmarked well for scanner-size images while keeping the UI responsive.
+    cv2.setUseOptimized(True)
+    cv2.setNumThreads(max(1, min(4, os.cpu_count() or 2)))
+
     app = QApplication(sys.argv)
     app.setApplicationName("AlignScan")
     app.setOrganizationName("buttermocca")
@@ -26,7 +33,7 @@ def main():
     splash = Splash(str(assets_dir / "splash_mascot.gif"))
     splash.show()
     window = MainWindow()
-    QTimer.singleShot(1900, lambda: (splash.close(), window.show()))
+    QTimer.singleShot(1500, lambda: (splash.close(), window.show()))
     sys.exit(app.exec())
 
 
