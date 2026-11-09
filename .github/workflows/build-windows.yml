@@ -1,0 +1,39 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-exe:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements-dev.txt pyinstaller
+      - name: Test document detection
+        run: python -m pytest -q
+      - name: Generate mascot and app icon
+        run: python -c "from alignscan.asset_generator import ensure_assets; ensure_assets('assets')"
+      - name: Build executable
+        shell: cmd
+        run: pyinstaller --noconfirm --clean --windowed --onefile --name AlignScan --icon assets\app_icon.ico --add-data "assets;assets" --collect-all PySide6 --collect-all cv2 --collect-all onnxruntime app.py
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: AlignScan-Windows-x64
+          path: dist/AlignScan.exe
+          if-no-files-found: error
+          retention-days: 30
