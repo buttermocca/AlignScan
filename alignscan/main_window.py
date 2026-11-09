@@ -41,6 +41,10 @@ class MainWindow(QMainWindow):
         self.preview_timer.setSingleShot(True)
         self.preview_timer.setInterval(160)
         self.preview_timer.timeout.connect(self.update_preview)
+        self.sensitivity_timer = QTimer(self)
+        self.sensitivity_timer.setSingleShot(True)
+        self.sensitivity_timer.setInterval(350)
+        self.sensitivity_timer.timeout.connect(self.auto_detect)
         self._build_ui()
         self._connect_canvas()
         self._set_controls_enabled(False)
@@ -150,7 +154,7 @@ class MainWindow(QMainWindow):
         self.sensitivity_slider.setValue(62)
         self.sensitivity_slider.valueChanged.connect(
             lambda value: self.sensitivity_value.setText(f"{value} / 100"))
-        self.sensitivity_slider.sliderReleased.connect(self.auto_detect)
+        self.sensitivity_slider.valueChanged.connect(lambda _value: self.sensitivity_timer.start())
         sens_col.addWidget(self.sensitivity_slider)
         sens_hint = QLabel("값을 높이면 흐린 경계와 작은 카드를 더 적극적으로 찾아요.")
         sens_hint.setWordWrap(True)
@@ -351,6 +355,7 @@ class MainWindow(QMainWindow):
             return
         self.image = image
         self.image_path = path
+        self._preview_region = -1
         self.regions = []
         self.selected = -1
         height, width = image.shape[:2]
