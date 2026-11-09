@@ -27,3 +27,11 @@
 - Added manual arbitrary-angle rotation with synchronized slider and numeric input.
 - Added affine point transforms so existing crop regions follow rotate/flip/deskew changes.
 - Added unit tests for rotation, flip, arbitrary-angle canvas expansion, and ruler-based deskew.
+
+## 1.2.1
+- Corrected yolo_doc_v1.onnx handling to match upstream 960px letterbox preprocessing.
+- Changed the YOLO document confidence default from 0.30 to the upstream 0.25 threshold.
+- Added a confidence adjustment control (5–80%) and an explicit AI re-run button.
+- Added runtime diagnostics: model input size, output tensor shape, maximum confidence, candidate and kept detection counts.
+- Clarified that yolo_doc_v1 is a single-class coarse axis-aligned document-box detector, not a four-corner or multi-receipt flatbed scan model.
+- Added ONNX output-layout and 960px letterbox regression tests.
